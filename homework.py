@@ -5,6 +5,7 @@ import time
 import requests
 import telegram
 from dotenv import load_dotenv
+from requests.exceptions import HTTPError
 
 
 load_dotenv()
@@ -32,6 +33,11 @@ LOG_API_REQUEST = 'Отправка запроса к API.'
 LOG_MSG_TO_TELEGRAM = 'Отправка сообщения в Telegram: "{message}".'
 LOG_STARTUP = '{bot_name} запущен.'
 LOG_EXCEPTION = 'Бот столкнулся с ошибкой: {exception}'
+LOG_EXCEPTION_STATUS = ('Статус ответа сервера Я.Практикума'
+                        'отличен от 200: {exception}')
+LOG_EXCEPTION_FORMAT = ('Сервер вернул нелжиданный формат данных.'
+                        'Описание ошибки: {exception}')
+STATUS_OK = 200
 
 
 def parse_homework_status(homework):
@@ -53,7 +59,15 @@ def get_homework_statuses(current_timestamp):
         headers=headers,
         params=params,
     )
-    return homework_statuses.json()
+    if homework_statuses.status_code != STATUS_OK:
+        raise HTTPError(LOG_EXCEPTION_STATUS.format(exception=str(HTTPError)))
+    parsed_data = homework_statuses.json()
+    erroneous_format = parsed_data.get('error') or parsed_data.get('code')
+    if erroneous_format:
+        raise requests.exceptions.ContentDecodingError(
+            LOG_EXCEPTION_FORMAT.format(exception=erroneous_format)
+        )
+    return parsed_data
 
 
 def send_message(message, bot_client):
