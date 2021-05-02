@@ -53,6 +53,7 @@ def setup_logger(logger, filename):
 
 
 def parse_homework_status(homework):
+    # status error
     if homework['status'] not in VERDICT_DICT:
         raise KeyError(VERDICT_ERROR.format(verdict=homework['status']))
     verdict = VERDICT_DICT[homework['status']]
@@ -71,10 +72,12 @@ def get_homework_statuses(current_timestamp):
         headers=headers,
         params=params,
     )
+    # connection error
     if homework_statuses.status_code != STATUS_OK:
         raise HTTPError(LOG_EXCEPTION_STATUS.format(exception=str(HTTPError)))
     parsed_data = homework_statuses.json()
     erroneous_format = parsed_data.get('error') or parsed_data.get('code')
+    # server error
     if erroneous_format:
         raise requests.exceptions.ContentDecodingError(
             LOG_EXCEPTION_FORMAT.format(exception=erroneous_format)
