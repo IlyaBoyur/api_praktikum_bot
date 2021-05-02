@@ -40,6 +40,18 @@ LOG_EXCEPTION_FORMAT = ('Сервер вернул нелжиданный фор
 STATUS_OK = 200
 
 
+bot = telegram.Bot(token=TELEGRAM_TOKEN)
+logger = logging.getLogger(__name__)
+
+
+def setup_logger(logger, filename):
+    handler = logging.FileHandler(filename, mode='a')
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+
 def parse_homework_status(homework):
     if homework['status'] not in VERDICT_DICT:
         raise KeyError(VERDICT_ERROR.format(verdict=homework['status']))
@@ -53,7 +65,7 @@ def parse_homework_status(homework):
 def get_homework_statuses(current_timestamp):
     headers = {'Authorization': f'{PRAKTIKUM_AUTH_HEADER}'}
     params = {'from_date': current_timestamp}
-    logging.info(f'{LOG_API_REQUEST}')
+    logger.info(f'{LOG_API_REQUEST}')
     homework_statuses = requests.get(
         PRAKTIKUM_API_URL,
         headers=headers,
@@ -70,26 +82,20 @@ def get_homework_statuses(current_timestamp):
     return parsed_data
 
 
-def send_message(message, bot_client):
-    logging.error(LOG_MSG_TO_TELEGRAM.format(message=message))
-    return bot_client.send_message(CHAT_ID, message)
+def send_message(message):
+    logger.error(LOG_MSG_TO_TELEGRAM.format(message=message))
+    return bot.send_message(CHAT_ID, message)
 
 
 def main():
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="[%(levelname)s] %(message)s"
-    )
-    bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    logging.debug(LOG_STARTUP.format(bot_name=bot.name))
+    logger.debug(LOG_STARTUP.format(bot_name=bot.name))
     while True:
         try:
             new_homework = get_homework_statuses(current_timestamp)
             if new_homework.get('homeworks'):
                 send_message(
-                    parse_homework_status(new_homework.get('homeworks')[0]),
-                    bot
+                    parse_homework_status(new_homework.get('homeworks')[0])
                 )
             # Update timestamp
             current_timestamp = new_homework.get(
@@ -100,9 +106,10 @@ def main():
             time.sleep(1200)
 
         except Exception:
-            logging.error(LOG_EXCEPTION.format(exception=Exception))
+            logger.exception(LOG_EXCEPTION.format(exception=str(Exception)))
             time.sleep(5)
 
 
 if __name__ == '__main__':
+    setup_logger(logger, 'data.log')
     main()
