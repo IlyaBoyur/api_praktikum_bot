@@ -67,14 +67,12 @@ def get_homework_statuses(current_timestamp):
     headers = {'Authorization': f'{PRAKTIKUM_AUTH_HEADER}'}
     params = {'from_date': current_timestamp}
     logger.info(f'{LOG_API_REQUEST}')
+
     homework_statuses = requests.get(
         PRAKTIKUM_API_URL,
         headers=headers,
         params=params,
     )
-    # connection error
-    if homework_statuses.status_code != STATUS_OK:
-        raise HTTPError(LOG_EXCEPTION_STATUS.format(exception=str(HTTPError)))
     parsed_data = homework_statuses.json()
     erroneous_format = parsed_data.get('error') or parsed_data.get('code')
     # server error
@@ -85,9 +83,9 @@ def get_homework_statuses(current_timestamp):
     return parsed_data
 
 
-def send_message(message):
+def send_message(message, bot_client=bot):
     logger.error(LOG_MSG_TO_TELEGRAM.format(message=message))
-    return bot.send_message(CHAT_ID, message)
+    return bot_client.send_message(CHAT_ID, message)
 
 
 def main():
@@ -107,7 +105,11 @@ def main():
             )
             # Ask every 20 minutes
             time.sleep(1200)
-
+        except HTTPError:
+            # connection error
+            logger.exception(
+                LOG_EXCEPTION_STATUS.format(exception=str(HTTPError))
+            )
         except Exception:
             logger.exception(LOG_EXCEPTION.format(exception=str(Exception)))
             time.sleep(5)
