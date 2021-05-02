@@ -57,8 +57,8 @@ def parse_homework_status(homework):
         raise KeyError(VERDICT_ERROR.format(verdict=homework['status']))
     verdict = VERDICT_DICT[homework['status']]
     return VERDICT_SUCCESS.format(
-            homework=homework["homework_name"],
-            verdict=verdict,
+        homework=homework["homework_name"],
+        verdict=verdict,
     )
 
 
