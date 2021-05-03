@@ -21,8 +21,8 @@ STATUS_ERROR = 'Статус работы неизвестен. Сервер в�
 STATUS_SUCCESS = 'У вас проверили работу "{homework}"!\n\n{status}'
 STATUS_S = {
     'rejected': 'К сожалению в работе нашлись ошибки.',
-    'approved': ('Ревьюеру всё понравилось, '
-                 'можно приступать к следующему уроку.'),
+    'approved': 'Ревьюеру всё понравилось, '
+                'можно приступать к следующему уроку.',
     'reviewing': 'Ваша работа прошла тесты и поступила на ревью.',
 }
 LOG_API_REQUEST = 'Отправка запроса к API.'
@@ -55,20 +55,16 @@ def parse_homework_status(homework):
 
 def get_homework_statuses(current_timestamp):
     logger.info(LOG_API_REQUEST)
+    request_params = dict(
+        url=PRAKTIKUM_API_URL,
+        headers=PRAKTIKUM_AUTH_HEADERS,
+        params={'from_date': current_timestamp},
+    )
     try:
-        homework_statuses = requests.get(
-            PRAKTIKUM_API_URL,
-            headers=PRAKTIKUM_AUTH_HEADERS,
-            params={'from_date': current_timestamp},
-        )
-    except Exception as exception:
-        raise ConnectionAbortedError(
-            LOG_CONNECTION_FAILURE.format(
-                exception=exception,
-                url=PRAKTIKUM_API_URL,
-                headers=PRAKTIKUM_AUTH_HEADERS,
-                params={'from_date': current_timestamp},
-            )
+        homework_statuses = requests.get(**request_params)
+    except ConnectionError as error:
+        raise ConnectionError(
+            LOG_CONNECTION_FAILURE.format(error=error, **request_params)
         )
     parsed_data = homework_statuses.json()
     server_failure = ('error' in parsed_data) or ('code' in parsed_data)
@@ -104,11 +100,10 @@ def main():
                 'current_date',
                 current_timestamp,
             )
-            # Ask every 20 minutes
-            time.sleep(1200)
+            time.sleep(20 * 60)
         except Exception as exception:
             logger.exception(LOG_EXCEPTION.format(exception=exception))
-            time.sleep(300)
+            time.sleep(5 * 60)
 
 
 if __name__ == '__main__':
