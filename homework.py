@@ -5,7 +5,6 @@ import time
 import requests
 import telegram
 from dotenv import load_dotenv
-from requests.exceptions import HTTPError
 
 
 load_dotenv()
@@ -14,83 +13,85 @@ load_dotenv()
 PRAKTIKUM_TOKEN = os.getenv('PRAKTIKUM_TOKEN')
 PRAKTIKUM_API_URL = ('https://praktikum.yandex.ru/api/'
                      'user_api/homework_statuses/')
-PRAKTIKUM_AUTH_HEADER = f'OAuth {PRAKTIKUM_TOKEN}'
+PRAKTIKUM_AUTH_HEADERS = {'Authorization': f'OAuth {PRAKTIKUM_TOKEN}'}
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-VERDICT_REJECTED = 'К сожалению в работе нашлись ошибки.'
-VERDICT_APPROVED = ('Ревьюеру всё понравилось, '
-                    'можно приступать к следующему уроку.')
-VERDICT_REVIEWING = 'Ваша работа прошла тесты и поступила на ревью.'
-VERDICT_ERROR = 'Статус работы неизвестен. Сервер вернул значение: "{verdict}"'
-VERDICT_SUCCESS = 'У вас проверили работу "{homework}"!\n\n{verdict}'
-VERDICT_DICT = {
-    'rejected': VERDICT_REJECTED,
-    'approved': VERDICT_APPROVED,
-    'reviewing': VERDICT_REVIEWING,
+STATUS_ERROR = 'Статус работы неизвестен. Сервер вернул значение: "{status}"'
+STATUS_SUCCESS = 'У вас проверили работу "{homework}"!\n\n{status}'
+STATUS_S = {
+    'rejected': 'К сожалению в работе нашлись ошибки.',
+    'approved': ('Ревьюеру всё понравилось, '
+                 'можно приступать к следующему уроку.'),
+    'reviewing': 'Ваша работа прошла тесты и поступила на ревью.',
 }
 LOG_API_REQUEST = 'Отправка запроса к API.'
 LOG_MSG_TO_TELEGRAM = 'Отправка сообщения в Telegram: "{message}".'
-LOG_STARTUP = '{bot_name} запущен.'
+LOG_STARTUP = 'Бот запущен.'
 LOG_EXCEPTION = 'Бот столкнулся с ошибкой: {exception}'
-LOG_EXCEPTION_STATUS = ('Статус ответа сервера Я.Практикума'
-                        'отличен от 200: {exception}')
-LOG_EXCEPTION_FORMAT = ('Сервер вернул нелжиданный формат данных.'
-                        'Описание ошибки: {exception}')
-STATUS_OK = 200
+LOG_CONNECTION_FAILURE = ('Ошибка интернет соединения: {exception}\n'
+                          'URL: {url}\n'
+                          'Заголовки: {headers}\n'
+                          'Параметры: {params}\n')
+LOG_SERVER_FAILURE = ('Ошибка - сбой сервера.\n'
+                      'URL: {url}\n'
+                      'Заголовки: {headers}\n'
+                      'Параметры: {params}\n')
 
 
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 logger = logging.getLogger(__name__)
 
 
-def setup_logger(logger, filename):
-    handler = logging.FileHandler(filename, mode='a')
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
-
-
 def parse_homework_status(homework):
-    # status error
-    if homework['status'] not in VERDICT_DICT:
-        raise KeyError(VERDICT_ERROR.format(verdict=homework['status']))
-    verdict = VERDICT_DICT[homework['status']]
-    return VERDICT_SUCCESS.format(
+    status = homework['status']
+    if status not in STATUS_S:
+        raise ValueError(STATUS_ERROR.format(status=status))
+    return STATUS_SUCCESS.format(
         homework=homework["homework_name"],
-        verdict=verdict,
+        status=STATUS_S[status],
     )
 
 
 def get_homework_statuses(current_timestamp):
-    headers = {'Authorization': f'{PRAKTIKUM_AUTH_HEADER}'}
-    params = {'from_date': current_timestamp}
-    logger.info(f'{LOG_API_REQUEST}')
-
-    homework_statuses = requests.get(
-        PRAKTIKUM_API_URL,
-        headers=headers,
-        params=params,
-    )
+    logger.info(LOG_API_REQUEST)
+    try:
+        homework_statuses = requests.get(
+            PRAKTIKUM_API_URL,
+            headers=PRAKTIKUM_AUTH_HEADERS,
+            params={'from_date': current_timestamp},
+        )
+    except Exception as exception:
+        raise ConnectionAbortedError(
+            LOG_CONNECTION_FAILURE.format(
+                exception=exception,
+                url=PRAKTIKUM_API_URL,
+                headers=PRAKTIKUM_AUTH_HEADERS,
+                params={'from_date': current_timestamp},
+            )
+        )
     parsed_data = homework_statuses.json()
-    erroneous_format = parsed_data.get('error') or parsed_data.get('code')
+    server_failure = ('error' in parsed_data) or ('code' in parsed_data)
     # server error
-    if erroneous_format:
-        raise requests.exceptions.ContentDecodingError(
-            LOG_EXCEPTION_FORMAT.format(exception=erroneous_format)
+    if server_failure:
+        raise RuntimeError(
+            LOG_SERVER_FAILURE.format(
+                url=PRAKTIKUM_API_URL,
+                headers=PRAKTIKUM_AUTH_HEADERS,
+                params={'from_date': current_timestamp},
+            )
         )
     return parsed_data
 
 
 def send_message(message, bot_client=bot):
-    logger.error(LOG_MSG_TO_TELEGRAM.format(message=message))
+    logger.info(LOG_MSG_TO_TELEGRAM.format(message=message))
     return bot_client.send_message(CHAT_ID, message)
 
 
 def main():
     current_timestamp = int(time.time())
-    logger.debug(LOG_STARTUP.format(bot_name=bot.name))
+    logger.debug(LOG_STARTUP)
     while True:
         try:
             new_homework = get_homework_statuses(current_timestamp)
@@ -105,16 +106,16 @@ def main():
             )
             # Ask every 20 minutes
             time.sleep(1200)
-        except HTTPError:
-            # connection error
-            logger.exception(
-                LOG_EXCEPTION_STATUS.format(exception=str(HTTPError))
-            )
-        except Exception:
-            logger.exception(LOG_EXCEPTION.format(exception=str(Exception)))
-            time.sleep(5)
+        except Exception as exception:
+            logger.exception(LOG_EXCEPTION.format(exception=exception))
+            time.sleep(300)
 
 
 if __name__ == '__main__':
-    setup_logger(logger, 'data.log')
+    logging.basicConfig(
+        filename=__file__ + '.log',
+        filemode='a',
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(message)s"
+    )
     main()
