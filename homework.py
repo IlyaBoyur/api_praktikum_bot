@@ -29,11 +29,11 @@ LOG_API_REQUEST = 'Отправка запроса к API.'
 LOG_MSG_TO_TELEGRAM = 'Отправка сообщения в Telegram: "{message}".'
 LOG_STARTUP = 'Бот запущен.'
 LOG_EXCEPTION = 'Бот столкнулся с ошибкой: {exception}'
-LOG_CONNECTION_FAILURE = ('Ошибка интернет соединения: {exception}\n'
+LOG_CONNECTION_FAILURE = ('Ошибка интернет соединения: {error}\n'
                           'URL: {url}\n'
                           'Заголовки: {headers}\n'
                           'Параметры: {params}\n')
-LOG_SERVER_FAILURE = ('Ошибка - сбой сервера.\n'
+LOG_SERVER_FAILURE = ('Ошибка - сбой сервера: {error}\n'
                       'URL: {url}\n'
                       'Заголовки: {headers}\n'
                       'Параметры: {params}\n')
@@ -67,17 +67,18 @@ def get_homework_statuses(current_timestamp):
             LOG_CONNECTION_FAILURE.format(error=error, **request_params)
         )
     parsed_data = homework_statuses.json()
-    server_failure = ('error' in parsed_data) or ('code' in parsed_data)
-    # server error
-    if server_failure:
+    if 'error' in parsed_data:
+        error = parsed_data['error']
+    elif 'code' in parsed_data:
+        error = parsed_data['code']
+    else:
+        error = False
+    if error:
         raise RuntimeError(
-            LOG_SERVER_FAILURE.format(
-                url=PRAKTIKUM_API_URL,
-                headers=PRAKTIKUM_AUTH_HEADERS,
-                params={'from_date': current_timestamp},
-            )
+            LOG_SERVER_FAILURE.format(error=error, **request_params)
         )
-    return parsed_data
+    else:
+        return parsed_data
 
 
 def send_message(message, bot_client=bot):
