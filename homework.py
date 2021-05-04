@@ -67,18 +67,15 @@ def get_homework_statuses(current_timestamp):
             LOG_CONNECTION_FAILURE.format(error=error, **request_params)
         )
     parsed_data = homework_statuses.json()
-    if 'error' in parsed_data:
-        error = parsed_data['error']
-    elif 'code' in parsed_data:
-        error = parsed_data['code']
-    else:
-        error = False
-    if error:
-        raise RuntimeError(
-            LOG_SERVER_FAILURE.format(error=error, **request_params)
-        )
-    else:
-        return parsed_data
+    for key in ('error', 'code'):
+        if key in parsed_data:
+            raise RuntimeError(
+                LOG_SERVER_FAILURE.format(
+                    error=parsed_data[key],
+                    **request_params,
+                )
+            )
+    return parsed_data
 
 
 def send_message(message, bot_client=bot):
