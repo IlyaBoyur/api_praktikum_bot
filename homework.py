@@ -62,7 +62,7 @@ def get_homework_statuses(current_timestamp):
     )
     try:
         homework_statuses = requests.get(**request_params)
-    except ConnectionError as error:
+    except requests.RequestException as error:
         raise ConnectionError(
             LOG_CONNECTION_FAILURE.format(error=error, **request_params)
         )
