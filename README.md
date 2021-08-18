@@ -1,5 +1,5 @@
 # Telegram Bot for Homework updates
-* This bot requests Yndex.Praktikum API for homework updates every 20 minutes.
+* This bot requests Yandex.Praktikum REST API for homework updates every 20 minutes.
 * In case of an error exception is logged into a file homework.py.log
 
 ## How to use bot
